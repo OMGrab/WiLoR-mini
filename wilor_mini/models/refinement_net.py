@@ -66,7 +66,19 @@ def sample_joint_features(img_feat, joint_xy):
     x = joint_xy[:, :, 0] / (width - 1) * 2 - 1
     y = joint_xy[:, :, 1] / (height - 1) * 2 - 1
     grid = torch.stack((x, y), 2)[:, :, None, :]
+    
+    # grid_sample doesn't support half precision on CPU/MPS
+    original_dtype = img_feat.dtype
+    if img_feat.dtype == torch.float16 and img_feat.device.type in ('cpu', 'mps'):
+        img_feat = img_feat.float()
+        grid = grid.float()
+    
     img_feat = F.grid_sample(img_feat, grid, align_corners=True)[:, :, :, 0]  # batch_size, channel_dim, joint_num
+    
+    # Convert back to original dtype if needed
+    if original_dtype == torch.float16:
+        img_feat = img_feat.to(original_dtype)
+    
     img_feat = img_feat.permute(0, 2, 1).contiguous()  # batch_size, joint_num, channel_dim
     return img_feat
 
@@ -172,6 +184,7 @@ class RefineNet(nn.Module):
 
     def forward(self, img_feat, verts_3d, pred_cam, pred_mano_feats, focal_length):
         B = img_feat.shape[0]
+        img_feat = img_feat.contiguous()  # MPS compatibility: ensure input is contiguous
 
         img_feats = self.deconv(img_feat)
 
@@ -199,7 +212,7 @@ class RefineNet(nn.Module):
         pred_betas = pred_mano_feats['betas'] + delta_betas
         pred_cam = pred_mano_feats['cam'] + delta_cam
 
-        pred_hand_pose = rot6d_to_rotmat(pred_hand_pose).view(B, -1, 3, 3)
+        pred_hand_pose = rot6d_to_rotmat(pred_hand_pose).reshape(B, -1, 3, 3)  # MPS compatibility: use reshape instead of view
 
         pred_mano_params = {'global_orient': pred_hand_pose[:, :1],
                             'hand_pose': pred_hand_pose[:, 1:],

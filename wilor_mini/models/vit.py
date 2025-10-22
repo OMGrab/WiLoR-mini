@@ -194,6 +194,7 @@ class PatchEmbed(nn.Module):
 
     def forward(self, x, **kwargs):
         B, C, H, W = x.shape
+        x = x.contiguous()  # MPS compatibility: ensure input is contiguous before conv
         x = self.proj(x)
         Hp, Wp = x.shape[2], x.shape[3]
 
@@ -342,12 +343,12 @@ class ViT(nn.Module):
         pred_mano_feats['betas'] = pred_betas
         pred_mano_feats['cam'] = pred_cam
 
-        pred_hand_pose = rot6d_to_rotmat(pred_hand_pose).view(B, self.NUM_HAND_JOINTS + 1, 3, 3)
+        pred_hand_pose = rot6d_to_rotmat(pred_hand_pose).reshape(B, self.NUM_HAND_JOINTS + 1, 3, 3)  # MPS compatibility: use reshape instead of view
         pred_mano_params = {'global_orient': pred_hand_pose[:, [0]],
                             'hand_pose': pred_hand_pose[:, 1:],
                             'betas': pred_betas}
 
-        img_feat = x[:, 2 + (self.NUM_HAND_JOINTS + 1):].reshape(B, Hp, Wp, -1).permute(0, 3, 1, 2)
+        img_feat = x[:, 2 + (self.NUM_HAND_JOINTS + 1):].reshape(B, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()  # MPS compatibility
         return pred_mano_params, pred_cam, pred_mano_feats, img_feat
 
     def forward(self, x):

@@ -30,7 +30,7 @@ class WiLorHandPose3dEstimationPipeline:
 
     def init_models(self, **kwargs):
         """
-        focal_length: you will need to scale the actual focal length by 256/max_image_side_length for wilor to estimate 
+        focal_length: you will need to scale the actual focal length by 256/max_image_side_length for wilor to estimate
             camera translation properly.
         """
         # default to use CPU
@@ -74,6 +74,7 @@ class WiLorHandPose3dEstimationPipeline:
         self.logger.info(f"loading Yolo hand detection model >>> ")
         self.hand_detector = YOLO(yolo_model_path)
         self.hand_detector.to(self.device)
+        self.logger.info(f"YOLO detector using device: {self.device}")
 
     @torch.no_grad()
     def predict(self, image, **kwargs):

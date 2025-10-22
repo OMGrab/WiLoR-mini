@@ -30,19 +30,32 @@ class WiLor(nn.Module):
         self.mano = MANO(**mano_cfg)
         self.FOCAL_LENGTH = kwargs.get("focal_length", 5000)
         self.IMAGE_SIZE = kwargs.get("image_size", 256)
-        self.IMAGE_MEAN = torch.from_numpy(np.array([0.485, 0.456, 0.406]).reshape(1, 1, 1, 3))
-        self.IMAGE_STD = torch.from_numpy(np.array([0.229, 0.224, 0.225])).reshape(1, 1, 1, 3)
+        
+        # Register normalization tensors as buffers (auto-moved to device, cached)
+        self.register_buffer('IMAGE_MEAN', 
+                           torch.from_numpy(np.array([0.485, 0.456, 0.406])).reshape(1, 1, 1, 3).float())
+        self.register_buffer('IMAGE_STD', 
+                           torch.from_numpy(np.array([0.229, 0.224, 0.225])).reshape(1, 1, 1, 3).float())
 
     def forward(self, x):
-        x = x.flip(dims=[-1]) / 255.0
-        x = (x - self.IMAGE_MEAN.to(x.device, dtype=x.dtype)) / self.IMAGE_STD.to(x.device, dtype=x.dtype)
-        x = x.permute(0, 3, 1, 2)
         batch_size = x.shape[0]
+        
+        # Normalize image (optimized - buffers are already on correct device)
+        x = x.flip(dims=[-1]) / 255.0
+        if x.dtype != self.IMAGE_MEAN.dtype:
+            # Only convert if dtypes don't match (rare case)
+            x = (x - self.IMAGE_MEAN.to(x.dtype)) / self.IMAGE_STD.to(x.dtype)
+        else:
+            x = (x - self.IMAGE_MEAN) / self.IMAGE_STD
+        x = x.permute(0, 3, 1, 2)
+        
         # Compute conditioning features using the backbone
         # if using ViT backbone, we need to use a different aspect ratio
-        temp_mano_params, pred_cam, pred_mano_feats, vit_out = self.backbone(x[:, :, :, 32:-32])  # B, 1280, 16, 12
-        # Compute camera translation
-        focal_length = self.FOCAL_LENGTH * torch.ones(batch_size, 2, device=x.device, dtype=x.dtype)
+        x_cropped = x[:, :, :, 32:-32].contiguous()  # MPS compatibility: slicing creates non-contiguous tensor
+        temp_mano_params, pred_cam, pred_mano_feats, vit_out = self.backbone(x_cropped)  # B, 1280, 16, 12
+        
+        # Compute camera translation (optimized - create tensor directly on device)
+        focal_length = torch.full((batch_size, 2), self.FOCAL_LENGTH, device=x.device, dtype=x.dtype)
 
         ## Temp MANO
         temp_mano_params['global_orient'] = temp_mano_params['global_orient'].reshape(batch_size, -1, 3, 3)

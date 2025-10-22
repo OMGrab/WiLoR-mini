@@ -348,15 +348,18 @@ def test_wilor_image_pipeline():
 
 def test_wilor_video_pipeline():
     import cv2
-    import torch
-    import numpy as np
-    import os
     from wilor_mini.pipelines.wilor_hand_pose3d_estimation_pipeline import WiLorHandPose3dEstimationPipeline
 
     LIGHT_PURPLE = (0.25098039, 0.274117647, 0.65882353)
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    dtype = torch.float16
-
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        dtype = torch.float16
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        dtype = torch.float32
+    else:
+        device = torch.device("cpu")
+        dtype = torch.float32
     pipe = WiLorHandPose3dEstimationPipeline(device=device, dtype=dtype)
     video_path = "assets/video.mp4"
     save_dir = "./results"
@@ -381,7 +384,7 @@ def test_wilor_video_pipeline():
         ret, frame = cap.read()
         if not ret:
             break
-        
+
         outputs = pipe.predict(frame)
         # Convert frame to RGB
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -411,6 +414,9 @@ def test_wilor_video_pipeline():
 
         render_image = (255 * render_image).astype(np.uint8)
 
+        # Display the frame
+        cv2.imshow('Hand Pose Estimation', render_image)
+
         # Write the frame to the output video
         vout.write(render_image)
 
@@ -426,5 +432,5 @@ def test_wilor_video_pipeline():
 
 
 if __name__ == '__main__':
-    test_wilor_image_pipeline()
-    # test_wilor_video_pipeline()
+    # test_wilor_image_pipeline()
+    test_wilor_video_pipeline()
