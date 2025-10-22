@@ -20,3 +20,5 @@ results
 build
 dist
 scripts
+env
+.DS_Store
