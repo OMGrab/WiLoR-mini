@@ -34,6 +34,7 @@ class WiLorHandPose3dEstimationPipeline:
             camera translation properly.
         """
         # default to use CPU
+        os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
         self.device = kwargs.get("device", torch.device("cpu"))
         self.dtype = kwargs.get("dtype", torch.float32)
         self.FOCAL_LENGTH =  kwargs.get("focal_length", 5000)
